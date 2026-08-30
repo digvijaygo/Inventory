@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management System</title>
+    <script src="auth-guard.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Inventory Management System</h1>
+
+        <div class="location-panel">
+            <label for="locationSelect">Location/Plant</label>
+            <select id="locationSelect" required></select>
+        </div>
+        
+        <!-- Add Item Form -->
+        <form id="itemForm" class="form-container">
+            <input type="date" id="date" required>
+            <input type="text" id="inv_no" placeholder="INV. NO." required>
+            <input type="text" id="recipient" placeholder="Recipient" required>
+            <input type="text" id="udise" placeholder="UDISE" required>
+            <input type="text" id="recipient_address" placeholder="Recipient Address" required>
+            <input type="text" id="vehicle_no" placeholder="Vehicle No" required>
+            <input type="text" id="ewaybill_no" placeholder="Ewaybill No" required>
+            <input type="number" id="boys" placeholder="Boys" min="0" required>
+            <input type="number" id="girls" placeholder="Girls" min="0" required>
+            <button id="submitBtn" type="submit">Add Record</button>
+            <button id="cancelEditBtn" type="button" class="secondary-btn" style="display: none;">Cancel Edit</button>
+        </form>
+
+        <!-- Inventory List Table -->
+        <div class="section-header">
+            <h2>Current Stock</h2>
+            <div class="toolbar">
+                <input type="text" id="findInput" placeholder="Find by any text...">
+                <button id="findBtn" type="button">Find</button>
+                <button id="clearFindBtn" type="button" class="secondary-btn">Clear</button>
+                <button id="exportExcelBtn" type="button" class="export-btn">Export to Excel</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>DATE</th>
+                        <th>LOCATION/PLANT</th>
+                        <th>INV. NO.</th>
+                        <th>RECIPIENT</th>
+                        <th>UDISE</th>
+                        <th>RECIPIENT ADDRESS</th>
+                        <th>VEHICLE NO</th>
+                        <th>EWAYBILL NO</th>
+                        <th>BOYS</th>
+                        <th>GIRLS</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryTableBody">
+                    <!-- Dynamic rows will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        const API_URL = './api/items';
+        const LOCATION_STORAGE_KEY = 'inventory_selected_location';
+        const LOCATIONS = [
+            'Arneel Industries Karodi',
+            'Anil Industries Karodi',
+            'Anil Industries Ghanegoan',
+            'Anil Industries Yavatmal',
+            'Kpr Projections'
+        ];
+
+        const locationSelect = document.getElementById('locationSelect');
+        let allItems = [];
+        let editingId = null;
+
+        function normalizeLocationName(value) {
+            return String(value || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function isValidLocation(value) {
+            return LOCATIONS.includes(normalizeLocationName(value));
+        }
+
+        function initializeLocationOptions() {
+            locationSelect.innerHTML = '';
+
+            LOCATIONS.forEach((locationName) => {
+                const option = document.createElement('option');
+                option.value = locationName;
+                option.textContent = locationName;
+                locationSelect.appendChild(option);
+            });
+
+            const savedLocation = normalizeLocationName(localStorage.getItem(LOCATION_STORAGE_KEY) || '');
+            locationSelect.value = isValidLocation(savedLocation) ? savedLocation : LOCATIONS[0];
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getItemFormData() {
+            return {
+                date: document.getElementById('date').value,
+                location: normalizeLocationName(locationSelect.value),
+                inv_no: document.getElementById('inv_no').value.trim(),
+                recipient: document.getElementById('recipient').value.trim(),
+                udise: document.getElementById('udise').value.trim(),
+                recipient_address: document.getElementById('recipient_address').value.trim(),
+                vehicle_no: document.getElementById('vehicle_no').value.trim(),
+                ewaybill_no: document.getElementById('ewaybill_no').value.trim(),
+                boys: Number(document.getElementById('boys').value || 0),
+                girls: Number(document.getElementById('girls').value || 0)
+            };
+        }
+
+        function renderInventory(items) {
+            const tableBody = document.getElementById('inventoryTableBody');
+            tableBody.innerHTML = '';
+
+            items.forEach((item) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${escapeHtml(item.date)}</td>
+                    <td>${escapeHtml(item.location || '')}</td>
+                    <td>${escapeHtml(item.inv_no)}</td>
+                    <td>${escapeHtml(item.recipient)}</td>
+                    <td>${escapeHtml(item.udise)}</td>
+                    <td>${escapeHtml(item.recipient_address)}</td>
+                    <td>${escapeHtml(item.vehicle_no)}</td>
+                    <td>${escapeHtml(item.ewaybill_no)}</td>
+                    <td>${Number(item.boys) || 0}</td>
+                    <td>${Number(item.girls) || 0}</td>
+                    <td class="actions-cell">
+                        <button class="print-btn" onclick="printRow(${item.id})">Print</button>
+                        <button class="edit-btn" onclick="startEdit(${item.id})">Edit</button>
+                        <button class="delete-btn" onclick="deleteItem(${item.id})">Delete</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function applyFilter() {
+            const query = document.getElementById('findInput').value.trim().toLowerCase();
+            if (!query) {
+                renderInventory(allItems);
+                return;
+            }
+
+            const filtered = allItems.filter((item) => {
+                const joinedText = [
+                    item.date,
+                    item.location,
+                    item.inv_no,
+                    item.recipient,
+                    item.udise,
+                    item.recipient_address,
+                    item.vehicle_no,
+                    item.ewaybill_no,
+                    item.boys,
+                    item.girls
+                ].join(' ').toLowerCase();
+
+                return joinedText.includes(query);
+            });
+
+            renderInventory(filtered);
+        }
+
+        // Fetch and display inventory
+        async function fetchInventory() {
+            try {
+                const selectedLocation = normalizeLocationName(locationSelect.value);
+                if (!isValidLocation(selectedLocation)) {
+                    allItems = [];
+                    applyFilter();
+                    return;
+                }
+
+                const params = new URLSearchParams({ location: selectedLocation });
+                const response = await fetch(`${API_URL}?${params.toString()}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load records from server.');
+                }
+
+                allItems = await response.json();
+                applyFilter();
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Unable to load records.');
+            }
+        }
+
+        // Add or update item
+        document.getElementById('itemForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                const payload = getItemFormData();
+
+                const url = editingId ? `${API_URL}/${editingId}` : API_URL;
+                const method = editingId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorPayload = await response.json().catch(() => ({}));
+                    throw new Error(errorPayload.error || 'Unable to save record.');
+                }
+
+                resetForm();
+                await fetchInventory();
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Unable to save record.');
+            }
+        });
+
+        function resetForm() {
+            document.getElementById('itemForm').reset();
+            editingId = null;
+            document.getElementById('submitBtn').textContent = 'Add Record';
+            document.getElementById('cancelEditBtn').style.display = 'none';
+        }
+
+        function startEdit(id) {
+            const item = allItems.find((entry) => entry.id === id);
+            if (!item) return;
+
+            document.getElementById('date').value = item.date || '';
+            document.getElementById('inv_no').value = item.inv_no || '';
+            document.getElementById('recipient').value = item.recipient || '';
+            document.getElementById('udise').value = item.udise || '';
+            document.getElementById('recipient_address').value = item.recipient_address || '';
+            document.getElementById('vehicle_no').value = item.vehicle_no || '';
+            document.getElementById('ewaybill_no').value = item.ewaybill_no || '';
+            document.getElementById('boys').value = Number(item.boys) || 0;
+            document.getElementById('girls').value = Number(item.girls) || 0;
+            if (isValidLocation(item.location)) {
+                locationSelect.value = item.location;
+                localStorage.setItem(LOCATION_STORAGE_KEY, item.location);
+            }
+
+            editingId = id;
+            document.getElementById('submitBtn').textContent = 'Update Record';
+            document.getElementById('cancelEditBtn').style.display = 'inline-block';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+        // Delete item
+        async function deleteItem(id) {
+            if (confirm('Are you sure you want to remove this record?')) {
+                try {
+                    const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                    if (!response.ok) {
+                        const errorPayload = await response.json().catch(() => ({}));
+                        throw new Error(errorPayload.error || 'Unable to delete record.');
+                    }
+
+                    await fetchInventory();
+                } catch (error) {
+                    console.error(error);
+                    alert(error.message || 'Unable to delete record.');
+                }
+            }
+        }
+
+        function printRow(id) {
+            const item = allItems.find((entry) => entry.id === id);
+            if (!item) return;
+
+            const printWindow = window.open('', '_blank', 'width=900,height=650');
+            if (!printWindow) {
+                alert('Pop-up blocked. Please allow pop-ups to print this record.');
+                return;
+            }
+
+            const rowHtml = `
+                <tr>
+                    <td>${escapeHtml(item.date)}</td>
+                    <td>${escapeHtml(item.location || '')}</td>
+                    <td>${escapeHtml(item.inv_no)}</td>
+                    <td>${escapeHtml(item.recipient)}</td>
+                    <td>${escapeHtml(item.udise)}</td>
+                    <td>${escapeHtml(item.recipient_address)}</td>
+                    <td>${escapeHtml(item.vehicle_no)}</td>
+                    <td>${escapeHtml(item.ewaybill_no)}</td>
+                    <td>${Number(item.boys) || 0}</td>
+                    <td>${Number(item.girls) || 0}</td>
+                </tr>
+            `;
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Print Record</title>
+                    <style>
+                        body { font-family: Segoe UI, Tahoma, sans-serif; padding: 20px; color: #111; }
+                        h2 { margin-top: 0; }
+                        table { width: 100%; border-collapse: collapse; }
+                        th, td { border: 1px solid #bbb; padding: 8px; text-align: left; font-size: 13px; }
+                        th { background: #f3f3f3; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Inventory Record</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>DATE</th>
+                                <th>LOCATION/PLANT</th>
+                                <th>INV. NO.</th>
+                                <th>RECIPIENT</th>
+                                <th>UDISE</th>
+                                <th>RECIPIENT ADDRESS</th>
+                                <th>VEHICLE NO</th>
+                                <th>EWAYBILL NO</th>
+                                <th>BOYS</th>
+                                <th>GIRLS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowHtml}
+                        </tbody>
+                    </table>
+                </body>
+                </html>
+            `);
+
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+        }
+
+        document.getElementById('findBtn').addEventListener('click', applyFilter);
+        document.getElementById('findInput').addEventListener('input', applyFilter);
+        document.getElementById('findInput').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyFilter();
+            }
+        });
+        document.getElementById('clearFindBtn').addEventListener('click', () => {
+            document.getElementById('findInput').value = '';
+            applyFilter();
+        });
+
+        locationSelect.addEventListener('change', async () => {
+            localStorage.setItem(LOCATION_STORAGE_KEY, locationSelect.value);
+            resetForm();
+            await fetchInventory();
+        });
+
+        document.getElementById('exportExcelBtn').addEventListener('click', () => {
+            if (!allItems.length) {
+                alert('No records available to export.');
+                return;
+            }
+
+            if (typeof XLSX === 'undefined') {
+                alert('Excel export library failed to load. Please refresh and try again.');
+                return;
+            }
+
+            const exportRows = allItems.map((item) => ({
+                'DATE': item.date || '',
+                'LOCATION/PLANT': item.location || '',
+                'INV. NO.': item.inv_no || '',
+                'RECIPIENT': item.recipient || '',
+                'UDISE': item.udise || '',
+                'RECIPIENT ADDRESS': item.recipient_address || '',
+                'VEHICLE NO': item.vehicle_no || '',
+                'EWAYBILL NO': item.ewaybill_no || '',
+                'BOYS': Number(item.boys) || 0,
+                'GIRLS': Number(item.girls) || 0
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
+
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+            XLSX.writeFile(workbook, `inventory-records-${timestamp}.xlsx`);
+        });
+
+        // Load inventory on startup
+        window.onload = async () => {
+            initializeLocationOptions();
+            await fetchInventory();
+        };
+    </script>
+</body>
+</html>
