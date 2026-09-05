@@ -25,6 +25,13 @@
         <span class="menu-label">Home</span>
     </a>
 
+    <a href="dashboard.html" class="menu-link view-link" data-title="Dashboard" target="productFrame" title="Dashboard">
+        <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </span>
+        <span class="menu-label">Dashboard</span>
+    </a>
+
     <button id="inventoryToggle" class="menu-dropdown-btn" type="button" aria-expanded="false" title="Dispatch">
         <span class="menu-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h13v13H1z"/><path d="M14 8h4l4 4v4h-8z"/><circle cx="6" cy="18.5" r="1.8"/><circle cx="17" cy="18.5" r="1.8"/></svg>
@@ -65,6 +72,18 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
         </span>
         <span class="menu-label">Contractor Payment</span>
+    </a>
+    <a href="purchase-sales.html" class="menu-link view-link" data-title="Purchase and Sales" target="productFrame" title="Purchase and Sales">
+        <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h12l2 3h4v7H3z"/><path d="M7 7V4h7v3"/><path d="M7 14h10"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>
+        </span>
+        <span class="menu-label">Purchase and Sales</span>
+    </a>
+    <a href="attendance-payment.html" class="menu-link view-link" data-title="Attendance and Payment" target="productFrame" title="Attendance and Payment">
+        <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v3M16 3v3M4 9h16"/><path d="m8 14 2 2 5-5"/></svg>
+        </span>
+        <span class="menu-label">Attendance and Payment</span>
     </a>
     <a href="users.html" id="usersLink" class="menu-link view-link" data-title="User Management" target="productFrame" title="User Management">
         <span class="menu-icon" aria-hidden="true">
@@ -366,7 +385,7 @@
                 console.error('Logout failed:', error);
             }
 
-            window.location.href = 'login.html';
+            window.location.href = 'Home.html';
         });
 
         initializeBanner();

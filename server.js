@@ -217,6 +217,14 @@ db.serialize(() => {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS daily_stock_subcategories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_name TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(category_name, name)
+    )`);
+
     const categoryInsert = db.prepare('INSERT OR IGNORE INTO daily_stock_categories (name) VALUES (?)');
     DAILY_STOCK_CATEGORIES.forEach((categoryName) => {
         categoryInsert.run(categoryName);
@@ -340,6 +348,67 @@ db.serialize(() => {
         `CREATE INDEX IF NOT EXISTS idx_contractor_transactions_lookup
          ON contractor_payment_transactions(contractor_id, payment_date)`
     );
+
+    db.run(`CREATE TABLE IF NOT EXISTS attendance_employees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_code TEXT NOT NULL UNIQUE,
+        employee_name TEXT NOT NULL,
+        department TEXT NOT NULL,
+        joining_date TEXT NOT NULL,
+        paid_amount REAL NOT NULL DEFAULT 0,
+        attendance_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS purchase_sales_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transaction_type TEXT NOT NULL CHECK(transaction_type IN ('Purchase', 'Sale')),
+        invoice_date TEXT NOT NULL,
+        invoice_number TEXT NOT NULL,
+        bill_to TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        hsn_code TEXT NOT NULL,
+        rate REAL NOT NULL,
+        value_amount REAL NOT NULL,
+        cgst_percent REAL NOT NULL DEFAULT 0,
+        cgst_amount REAL NOT NULL DEFAULT 0,
+        sgst_percent REAL NOT NULL DEFAULT 0,
+        sgst_amount REAL NOT NULL DEFAULT 0,
+        igst_percent REAL NOT NULL DEFAULT 0,
+        igst_amount REAL NOT NULL DEFAULT 0,
+        amount REAL NOT NULL,
+        delivery TEXT,
+        dc_number TEXT,
+        ewaybill TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(transaction_type, invoice_number)
+    )`);
+    db.run(
+        `CREATE INDEX IF NOT EXISTS idx_purchase_sales_transactions_date
+         ON purchase_sales_transactions(invoice_date DESC)`
+    );
+
+    const attendanceSeed = [
+        ['EMP001', 'Rajesh Gupta', 'Production', '2026-01-01'],
+        ['EMP002', 'Suresh Kumar', 'Production', '2026-01-01'],
+        ['EMP003', 'Amit More', 'Accounts', '2026-01-01'],
+        ['EMP004', 'Neha Sharma', 'HR', '2026-01-01'],
+        ['EMP005', 'Priya Verma', 'Sales', '2026-01-01'],
+        ['EMP006', 'Vikram Singh', 'Production', '2026-01-01'],
+        ['EMP007', 'Kavita Patil', 'Accounts', '2026-01-01'],
+        ['EMP008', 'Rohan Joshi', 'Sales', '2026-01-01'],
+        ['EMP009', 'Meena Rao', 'HR', '2026-01-01'],
+        ['EMP010', 'Arjun Deshmukh', 'Production', '2026-01-01']
+    ];
+    const insertAttendanceSeed = db.prepare(
+        `INSERT OR IGNORE INTO attendance_employees
+         (employee_code, employee_name, department, joining_date, paid_amount, attendance_json)
+         VALUES (?, ?, ?, ?, 0, '[]')`
+    );
+    attendanceSeed.forEach((employee) => insertAttendanceSeed.run(employee));
+    insertAttendanceSeed.finalize();
 
     db.run(`CREATE TABLE IF NOT EXISTS app_users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -879,6 +948,123 @@ app.delete('/api/users/:id', requireAdmin, async (req, res) => {
 });
 
 // API: Get all available daily stock categories
+app.get('/api/attendance-employees', async (req, res) => {
+    try {
+        const rows = await dbAll(
+            `SELECT employee_code AS id, employee_name AS name, department, joining_date, paid_amount AS paid, attendance_json
+             FROM attendance_employees ORDER BY id ASC`
+        );
+        res.json(rows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            department: row.department,
+            joiningDate: row.joining_date,
+            paid: Number(row.paid) || 0,
+            daily: JSON.parse(row.attendance_json || '[]')
+        })));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/attendance-employees/bulk', async (req, res) => {
+    const employees = Array.isArray(req.body) ? req.body : req.body && req.body.employees;
+    if (!Array.isArray(employees)) return res.status(400).json({ error: 'employees array is required.' });
+    try {
+        await dbRun('BEGIN TRANSACTION');
+        for (const employee of employees) {
+            const id = String(employee.id || '').trim();
+            const name = String(employee.name || '').trim();
+            const department = String(employee.department || '').trim();
+            const joiningDate = String(employee.joiningDate || '').trim();
+            if (!id || !name || !department || !/^\d{4}-\d{2}-\d{2}$/.test(joiningDate)) throw new Error('Each employee needs id, name, department, and joiningDate.');
+            await dbRun(
+                `INSERT INTO attendance_employees (employee_code, employee_name, department, joining_date, paid_amount, attendance_json, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 ON CONFLICT(employee_code) DO UPDATE SET employee_name = excluded.employee_name, department = excluded.department,
+                 joining_date = excluded.joining_date, paid_amount = excluded.paid_amount, attendance_json = excluded.attendance_json, updated_at = CURRENT_TIMESTAMP`,
+                [id, name, department, joiningDate, Number(employee.paid) || 0, JSON.stringify(Array.isArray(employee.daily) ? employee.daily : [])]
+            );
+        }
+        await dbRun('COMMIT');
+        res.json({ message: 'Attendance employees saved.', count: employees.length });
+    } catch (error) {
+        try { await dbRun('ROLLBACK'); } catch (rollbackError) { /* transaction cleanup */ }
+        res.status(400).json({ error: error.message });
+    }
+});
+    function buildPurchaseSaleTransaction(body) {
+        const transactionType = String(body && body.transaction_type || '').trim();
+        const invoiceDate = String(body && body.invoice_date || '').trim();
+        const invoiceNumber = String(body && body.invoice_number || '').trim();
+        const billTo = String(body && body.bill_to || '').trim();
+        const itemName = String(body && body.item_name || '').trim();
+        const hsnCode = String(body && body.hsn_code || '').trim();
+        const ewaybill = String(body && body.ewaybill || '').trim();
+        const quantity = Number(body && body.quantity);
+        const rate = Number(body && body.rate);
+        const cgstPercent = Number(body && body.cgst_percent || 0);
+        const sgstPercent = Number(body && body.sgst_percent || 0);
+        const igstPercent = Number(body && body.igst_percent || 0);
+
+        if (!['Purchase', 'Sale'].includes(transactionType) || !isValidDateString(invoiceDate) || !invoiceNumber || !billTo || !itemName || !hsnCode || !ewaybill || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(rate) || rate < 0 || [cgstPercent, sgstPercent, igstPercent].some((percent) => !Number.isFinite(percent) || percent < 0)) {
+            throw new Error('Enter a valid invoice date, number, bill to, item, quantity, HSN code, rate, non-negative GST rates, and e-way bill.');
+        }
+
+        const valueAmount = quantity * rate;
+        const cgstAmount = valueAmount * cgstPercent / 100;
+        const sgstAmount = valueAmount * sgstPercent / 100;
+        const igstAmount = valueAmount * igstPercent / 100;
+        return [transactionType, invoiceDate, invoiceNumber, billTo, itemName, quantity, hsnCode, rate, valueAmount, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, valueAmount + cgstAmount + sgstAmount + igstAmount, String(body.delivery || '').trim(), String(body.dc_number || '').trim(), ewaybill];
+    }
+
+    app.get('/api/purchase-sales', async (req, res) => {
+        try {
+            const transactions = await dbAll('SELECT * FROM purchase_sales_transactions ORDER BY invoice_date DESC, id DESC');
+            res.json(transactions);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/purchase-sales', async (req, res) => {
+        try {
+            const transaction = buildPurchaseSaleTransaction(req.body);
+            const result = await dbRun(
+                `INSERT INTO purchase_sales_transactions (transaction_type, invoice_date, invoice_number, bill_to, item_name, quantity, hsn_code, rate, value_amount, cgst_percent, cgst_amount, sgst_percent, sgst_amount, igst_percent, igst_amount, amount, delivery, dc_number, ewaybill)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                transaction
+            );
+            res.status(201).json(await dbGet('SELECT * FROM purchase_sales_transactions WHERE id = ?', [result.lastID]));
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    });
+
+    app.put('/api/purchase-sales/:id', async (req, res) => {
+        try {
+            const transaction = buildPurchaseSaleTransaction(req.body);
+            const result = await dbRun(
+                `UPDATE purchase_sales_transactions SET transaction_type = ?, invoice_date = ?, invoice_number = ?, bill_to = ?, item_name = ?, quantity = ?, hsn_code = ?, rate = ?, value_amount = ?, cgst_percent = ?, cgst_amount = ?, sgst_percent = ?, sgst_amount = ?, igst_percent = ?, igst_amount = ?, amount = ?, delivery = ?, dc_number = ?, ewaybill = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [...transaction, Number(req.params.id)]
+            );
+            if (!result.changes) return res.status(404).json({ error: 'Transaction not found.' });
+            res.json(await dbGet('SELECT * FROM purchase_sales_transactions WHERE id = ?', [Number(req.params.id)]));
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    });
+
+    app.delete('/api/purchase-sales/:id', async (req, res) => {
+        try {
+            const result = await dbRun('DELETE FROM purchase_sales_transactions WHERE id = ?', [Number(req.params.id)]);
+            if (!result.changes) return res.status(404).json({ error: 'Transaction not found.' });
+            res.status(204).end();
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+
 app.get('/api/daily-stock-categories', (req, res) => {
     db.all(
         `SELECT id, name
@@ -920,6 +1106,44 @@ app.post('/api/daily-stock-categories', (req, res) => {
                     res.json({ id: this.lastID, name: normalizedName });
                 }
             );
+        }
+    );
+});
+
+// API: Get daily stock sub-categories. They are stored per category so they remain available before stock rows are added.
+// Also merges in any distinct "size" values already used in daily_stocks for this category, so older rows
+// entered before the sub-category table existed still show up in the sub-category dropdown.
+app.get('/api/daily-stock-subcategories', (req, res) => {
+    const category = normalizeCategoryName(req.query.category);
+    if (!category) return res.status(400).json({ error: 'Category is required.' });
+
+    db.all(
+        `SELECT name FROM daily_stock_subcategories WHERE category_name = ?
+         UNION
+         SELECT DISTINCT TRIM(size) AS name FROM daily_stocks WHERE category = ? AND TRIM(COALESCE(size, '')) != ''
+         ORDER BY name COLLATE NOCASE ASC`,
+        [category, category],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows.map((row) => ({ category_name: category, name: row.name })));
+        }
+    );
+});
+
+app.post('/api/daily-stock-subcategories', (req, res) => {
+    const category = normalizeCategoryName(req.body && req.body.category);
+    const name = normalizeCategoryName(req.body && req.body.name);
+    if (!category || !name) return res.status(400).json({ error: 'Category and Sub-Category are required.' });
+
+    db.run(
+        'INSERT INTO daily_stock_subcategories (category_name, name) VALUES (?, ?)',
+        [category, name],
+        function(err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Sub-Category already exists for this Category.' });
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ id: this.lastID, category_name: category, name });
         }
     );
 });
@@ -1714,13 +1938,14 @@ function handleGetContractorDayWise(req, res) {
         }
 
         db.all(
-            `SELECT payment_date,
-                    COUNT(*) AS payments_count,
-                    COALESCE(SUM(payment_amount), 0) AS total_paid
+                `SELECT payment_date,
+                    paid_by,
+                    payment_mode,
+                    payment_amount,
+                    id
              FROM contractor_payment_transactions
              ${whereSql}
-             GROUP BY payment_date
-             ORDER BY payment_date DESC`,
+                 ORDER BY payment_date DESC, id DESC`,
             params,
             (txnErr, rows) => {
                 if (txnErr) {
@@ -1737,9 +1962,12 @@ function handleGetContractorDayWise(req, res) {
                         toDate: hasDateFilter ? toDate : null
                     },
                     dayWise: rows.map((row) => ({
+                        id: row.id,
                         payment_date: row.payment_date,
-                        payments_count: Number(row.payments_count) || 0,
-                        total_paid: Number(row.total_paid) || 0
+                        paid_by: row.paid_by || '',
+                        payment_mode: row.payment_mode || '',
+                        remarks: row.remarks || '',
+                        total_amount: Number(row.payment_amount) || 0
                     }))
                 });
             }
@@ -1750,6 +1978,37 @@ function handleGetContractorDayWise(req, res) {
 // API: Get day-wise payment details for contractor in selected period
 app.get('/api/contractor-payments/:id/transactions', handleGetContractorDayWise);
 app.get('/api/contractor-payments/:id/daywise', handleGetContractorDayWise);
+
+app.put('/api/contractor-payments/:id/payments/:transactionId', (req, res) => {
+    const contractorId = Number(req.params.id);
+    const transactionId = Number(req.params.transactionId);
+    const { payment_date, payment_amount, payment_mode, paid_by, remarks } = req.body || {};
+    const amount = Number(payment_amount);
+    if (!Number.isInteger(contractorId) || !Number.isInteger(transactionId) || contractorId <= 0 || transactionId <= 0) return res.status(400).json({ error: 'Invalid payment selected.' });
+    if (!isValidDateString(payment_date) || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Valid payment date and positive amount are required.' });
+    db.run(
+        `UPDATE contractor_payment_transactions
+         SET payment_date = ?, payment_amount = ?, payment_mode = ?, paid_by = ?, remarks = ?
+         WHERE id = ? AND contractor_id = ?`,
+        [payment_date, amount, String(payment_mode || 'Online').trim() || 'Online', String(paid_by || '').trim(), String(remarks || '').trim(), transactionId, contractorId],
+        function(updateErr) {
+            if (updateErr) return res.status(500).json({ error: updateErr.message });
+            if (!this.changes) return res.status(404).json({ error: 'Payment transaction not found.' });
+            res.json({ message: 'Payment updated.', changes: this.changes });
+        }
+    );
+});
+
+app.delete('/api/contractor-payments/:id/payments/:transactionId', (req, res) => {
+    const contractorId = Number(req.params.id);
+    const transactionId = Number(req.params.transactionId);
+    if (!Number.isInteger(contractorId) || !Number.isInteger(transactionId) || contractorId <= 0 || transactionId <= 0) return res.status(400).json({ error: 'Invalid payment selected.' });
+    db.run('DELETE FROM contractor_payment_transactions WHERE id = ? AND contractor_id = ?', [transactionId, contractorId], function(deleteErr) {
+        if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+        if (!this.changes) return res.status(404).json({ error: 'Payment transaction not found.' });
+        res.json({ message: 'Payment deleted.', changes: this.changes });
+    });
+});
 
 // API: Add contractor payment transaction
 app.post('/api/contractor-payments/:id/payments', (req, res) => {

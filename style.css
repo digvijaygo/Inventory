@@ -20,19 +20,92 @@ h1, h2 {
 
 .location-panel {
     display: flex;
-    align-items: center;
+    align-items: end;
     gap: 10px;
     margin-bottom: 14px;
     flex-wrap: wrap;
 }
 
-.location-panel label {
-    font-weight: 600;
-    color: #374151;
+.filter-field {
+    display: grid;
+    gap: 6px;
 }
 
-.location-panel select {
+.location-panel input[type="date"] {
+    font-size: 11px;
+}
+
+.multi-select {
+    position: relative;
     min-width: 320px;
+}
+
+.multi-select-toggle {
+    width: 100%;
+    background: #ffffff;
+    color: #17233f;
+    border: 1px solid #ddd;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.multi-select-toggle::after {
+    content: "▾";
+    font-size: 12px;
+    color: #64748b;
+}
+
+.multi-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+    z-index: 30;
+    padding: 6px;
+}
+
+.multi-options-list {
+    display: grid;
+    gap: 2px;
+}
+
+.multi-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #334155;
+    font-size: 13px;
+}
+
+.multi-option:hover {
+    background: #f1f5f9;
+}
+
+.select-all-option {
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 6px;
+    padding-bottom: 8px;
+}
+
+.location-panel select,
+.location-panel input[type="date"] {
+    min-width: 320px;
+}
+
+#locationSelect {
+    min-height: 132px;
+    padding: 6px;
 }
 
 .form-container {
@@ -201,13 +274,277 @@ tbody tr:hover td {
     background-color: #066b52;
 }
 
+.cabin-summary-section {
+    margin-top: 24px;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+    overflow: hidden;
+}
+
+.cabin-summary-header {
+    min-height: 43px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #edf0f4;
+}
+
+.cabin-summary-header h2 {
+    margin: 0;
+    color: #17233f;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.cabin-summary-header h2 span {
+    color: #667085;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.cabin-summary-total {
+    color: #344054;
+    font-size: 12px;
+}
+
+.cabin-summary-total strong {
+    color: #17233f;
+    font-size: 13px;
+}
+
+.cabin-summary-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.cabin-period-select {
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid #dfe3eb;
+    border-radius: 5px;
+    background: #ffffff;
+    color: #475467;
+    font-size: 11px;
+}
+
+.cabin-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    padding: 12px 14px 0;
+    color: #667085;
+    font-size: 11px;
+}
+
+.cabin-chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cabin-legend-dot {
+    width: 9px;
+    height: 9px;
+    display: inline-block;
+    border-radius: 50%;
+}
+
+.boys-dot,
+.boys-bar {
+    background: #1267d9;
+}
+
+.girls-dot,
+.girls-bar {
+    background: #e95191;
+}
+
+.cabin-bar-chart {
+    height: 245px;
+    display: flex;
+    margin: 18px 14px 0;
+}
+
+.cabin-chart-y-axis {
+    width: 42px;
+    padding-bottom: 27px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: #9ca3af;
+    font-size: 10px;
+    text-align: right;
+}
+
+.cabin-chart-area {
+    flex: 1;
+    position: relative;
+    margin-left: 10px;
+}
+
+.cabin-grid-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px dashed #e5e7eb;
+}
+
+.cabin-line-1 { top: 0; }
+.cabin-line-2 { top: 25%; }
+.cabin-line-3 { top: 50%; }
+.cabin-line-4 { top: 75%; }
+.cabin-line-5 { bottom: 27px; }
+
+.cabin-bars {
+    position: absolute;
+    inset: 0 0 27px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    gap: 8px;
+}
+
+.cabin-month {
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: 38px;
+    position: relative;
+    padding-bottom: 27px;
+}
+
+.cabin-bar {
+    width: 17px;
+    min-height: 2px;
+    border-radius: 4px 4px 0 0;
+    position: relative;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.cabin-bar:hover {
+    opacity: 0.75;
+    transform: translateY(-3px);
+}
+
+.cabin-bar span {
+    position: absolute;
+    top: -17px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #667085;
+    font-size: 9px;
+}
+
+.cabin-month-label {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #8a93a3;
+    font-size: 10px;
+}
+
+.cabin-summary-empty {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding: 12px;
+    color: #667085;
+    font-size: 12px;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+
+.modal-card {
+    width: min(1080px, 100%);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #e4e7ec;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.modal-header p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.modal-close {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid #d0d5dd;
+    background: #ffffff;
+    color: #334155;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    background: #f8fafc;
+}
+
+.modal-form {
+    padding: 16px;
+    margin-bottom: 0;
+}
+
+.modal-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 @media (max-width: 1024px) {
-    .location-panel select {
+    .location-panel input[type="date"] {
+        min-width: 220px;
+    }
+
+    .multi-select {
         min-width: 220px;
     }
 
     .form-container {
         grid-template-columns: repeat(2, minmax(140px, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .modal-actions {
+        justify-content: stretch;
+    }
+
+    .modal-actions button {
+        flex: 1;
     }
 }
 

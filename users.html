@@ -34,32 +34,50 @@
     </div>
 
     <div id="userModal" class="modal-overlay" style="display:none;">
-        <div class="modal-card">
-            <h2 id="modalTitle">Add New User</h2>
+        <div class="payment-modal">
+            <div class="modal-header">
+                <div>
+                    <h2 id="modalTitle">Add New User</h2>
+                    <p id="modalSubtitle">Create a user account with role and status</p>
+                </div>
+
+                <button type="button" class="modal-close" id="closeUserModal">×</button>
+            </div>
+
             <form id="userForm">
                 <input type="hidden" id="userId">
 
-                <label for="fullName">Full Name</label>
-                <input id="fullName" type="text" required>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="fullName">Full Name</label>
+                        <input id="fullName" type="text" placeholder="Enter full name" required>
+                    </div>
 
-                <label for="mobileNumber">Mobile Number</label>
-                <input id="mobileNumber" type="tel" maxlength="10" required>
+                    <div class="form-group">
+                        <label for="mobileNumber">Mobile Number</label>
+                        <input id="mobileNumber" type="tel" maxlength="10" placeholder="Enter 10-digit mobile" required>
+                    </div>
 
-                <label for="role">Role</label>
-                <select id="role" required>
-                    <option value="Admin">Admin</option>
-                    <option value="Employee">Employee</option>
-                </select>
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select id="role" required>
+                            <option value="Admin">Admin</option>
+                            <option value="Employee">Employee</option>
+                        </select>
+                    </div>
 
-                <label for="isActive">Status</label>
-                <select id="isActive" required>
-                    <option value="1">Active</option>
-                    <option value="0">Inactive</option>
-                </select>
+                    <div class="form-group full-width">
+                        <label for="isActive">Status</label>
+                        <select id="isActive" required>
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                    </div>
+                </div>
 
-                <div class="modal-actions">
-                    <button type="button" id="cancelBtn" class="secondary-btn">Cancel</button>
-                    <button type="submit">Save</button>
+                <div class="modal-footer">
+                    <button type="button" id="cancelBtn" class="modal-cancel">Cancel</button>
+                    <button type="submit" id="saveUserBtn" class="modal-save">Save User</button>
                 </div>
             </form>
         </div>

@@ -6,7 +6,10 @@ const addUserBtn = document.getElementById('addUserBtn');
 const userModal = document.getElementById('userModal');
 const userForm = document.getElementById('userForm');
 const modalTitle = document.getElementById('modalTitle');
+const modalSubtitle = document.getElementById('modalSubtitle');
 const cancelBtn = document.getElementById('cancelBtn');
+const closeUserModalBtn = document.getElementById('closeUserModal');
+const saveUserBtn = document.getElementById('saveUserBtn');
 
 const userIdInput = document.getElementById('userId');
 const fullNameInput = document.getElementById('fullName');
@@ -33,6 +36,8 @@ function closeModal() {
 
 function openAddModal() {
     modalTitle.textContent = 'Add New User';
+    modalSubtitle.textContent = 'Create a user account with role and status';
+    saveUserBtn.textContent = 'Save User';
     userIdInput.value = '';
     fullNameInput.value = '';
     mobileNumberInput.value = '';
@@ -43,6 +48,8 @@ function openAddModal() {
 
 function openEditModal(user) {
     modalTitle.textContent = 'Edit User';
+    modalSubtitle.textContent = 'Update user details, role and status';
+    saveUserBtn.textContent = 'Update User';
     userIdInput.value = String(user.id);
     fullNameInput.value = user.full_name || '';
     mobileNumberInput.value = user.mobile_number || '';
@@ -176,6 +183,7 @@ async function deleteUser(id) {
 
 addUserBtn.addEventListener('click', openAddModal);
 cancelBtn.addEventListener('click', closeModal);
+closeUserModalBtn.addEventListener('click', closeModal);
 userModal.addEventListener('click', (event) => {
     if (event.target === userModal) {
         closeModal();

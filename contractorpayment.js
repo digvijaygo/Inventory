@@ -31,6 +31,8 @@ const elements = {
 	totalBalance: document.getElementById('totalBalance'),
 	totalQuantity: document.getElementById('totalQuantity'),
 	paymentModal: document.getElementById('paymentModal'),
+	paymentModalTitle: document.querySelector('#paymentModal h2'),
+	paymentModalSubtitle: document.querySelector('#paymentModal .modal-header p'),
 	closePaymentModal: document.getElementById('closePaymentModal'),
 	cancelPaymentBtn: document.getElementById('cancelPaymentBtn'),
 	paymentForm: document.getElementById('paymentForm'),
@@ -78,8 +80,10 @@ const workSummaryConfig = [
 const state = {
 	rows: [],
 	contractors: [],
+	detailPayments: [],
 	currentPage: 1,
 	editingContractorId: null
+	,editingPaymentId: null
 };
 
 function getTodayISO() {
@@ -216,7 +220,7 @@ function showNoDetailsModal(contractorName, subtitleText) {
 	elements.detailsModalSubtitle.textContent = subtitleText;
 	elements.contractorDetailsBody.innerHTML = '';
 	const tr = document.createElement('tr');
-	tr.innerHTML = '<td colspan="3">No records available.</td>';
+	tr.innerHTML = '<td colspan="5">No records available.</td>';
 	elements.contractorDetailsBody.appendChild(tr);
 	elements.contractorDetailsModal.style.display = 'flex';
 }
@@ -337,7 +341,7 @@ function renderTable() {
 		tr.innerHTML = `
 			<td>${startIndex + index + 1}</td>
 			<td>
-				<button class="name-link" type="button" data-view-details-id="${row.id}">${escapeHtml(row.contractor_name)}</button>
+				<a class="name-link" href="#contractorDetailsModal" data-view-details-id="${row.id}">${escapeHtml(row.contractor_name)}</a>
 			</td>
 			<td>${formatNumber(row.fabrication)}</td>
 			<td>${formatNumber(row.cement_sheet)}</td>
@@ -400,13 +404,35 @@ function renderAll() {
 
 function openPaymentModal(contractorId) {
 	elements.paymentForm.reset();
+	state.editingPaymentId = null;
+	elements.paymentModalTitle.textContent = 'Add Contractor Payment';
+	elements.paymentModalSubtitle.textContent = 'Record a new contractor payment';
 	elements.paymentDate.value = getTodayISO();
 	elements.paymentContractor.value = contractorId ? String(contractorId) : '';
 	elements.paymentModal.style.display = 'flex';
 }
 
+function openEditPaymentModal(contractorId, payment) {
+	state.editingPaymentId = Number(payment.id);
+	elements.paymentForm.reset();
+	elements.paymentContractor.value = String(contractorId);
+	elements.paymentContractor.disabled = true;
+	elements.paymentDate.value = payment.payment_date || '';
+	elements.paymentAmount.value = payment.total_amount || '';
+	elements.paymentMode.value = payment.payment_mode || 'Online';
+	elements.paidBy.value = payment.paid_by || '';
+	elements.paymentRemarks.value = payment.remarks || '';
+	elements.paymentModalTitle.textContent = 'Edit Contractor Payment';
+	elements.paymentModalSubtitle.textContent = 'Update the selected payment record';
+	elements.paymentModal.style.display = 'flex';
+}
+
 function closePaymentModal() {
 	elements.paymentModal.style.display = 'none';
+	state.editingPaymentId = null;
+	elements.paymentContractor.disabled = false;
+	elements.paymentModalTitle.textContent = 'Add Contractor Payment';
+	elements.paymentModalSubtitle.textContent = 'Record a new contractor payment';
 }
 
 function exportTableToExcel() {
@@ -526,7 +552,7 @@ async function deleteContractor(contractorId, contractorName) {
 	}
 }
 
-async function openDetailsModal(row) {
+async function openDetailsModal(row, showAllPayments = false) {
 	const contractorId = Number(row && row.id);
 	if (!Number.isInteger(contractorId) || contractorId <= 0) {
 		alert('Invalid contractor selected.');
@@ -534,14 +560,9 @@ async function openDetailsModal(row) {
 	}
 
 	const contractorName = row && row.contractor_name ? row.contractor_name : 'Contractor';
-	if ((Number(row && row.total_amount) || 0) <= 0) {
-		showNoDetailsModal(contractorName, 'Total amount is 0');
-		return;
-	}
-
 	const params = new URLSearchParams();
-	if (elements.fromDate.value) params.set('fromDate', elements.fromDate.value);
-	if (elements.toDate.value) params.set('toDate', elements.toDate.value);
+	if (!showAllPayments && elements.fromDate.value) params.set('fromDate', elements.fromDate.value);
+	if (!showAllPayments && elements.toDate.value) params.set('toDate', elements.toDate.value);
 
 	try {
 		const response = await fetch(`${CONTRACTOR_API_URL}/${contractorId}/daywise?${params.toString()}`, {
@@ -555,6 +576,7 @@ async function openDetailsModal(row) {
 
 		const payload = await response.json();
 		const dayWise = Array.isArray(payload.dayWise) ? payload.dayWise : [];
+		state.detailPayments = dayWise;
 		const resolvedContractorName = (payload.contractor && payload.contractor.contractor_name) || contractorName;
 
 		elements.detailsModalTitle.textContent = `${resolvedContractorName} - Day-wise Details`;
@@ -572,10 +594,14 @@ async function openDetailsModal(row) {
 				const tr = document.createElement('tr');
 				tr.innerHTML = `
 					<td>${escapeHtml(entry.payment_date)}</td>
-					<td>${formatNumber(entry.payments_count)}</td>
-					<td>₹${formatCurrency(entry.total_paid)}</td>
+					<td>${escapeHtml(entry.paid_by || '-')}</td>
+					<td>${escapeHtml(entry.payment_mode || '-')}</td>
+					<td>₹${formatCurrency(entry.total_amount)}</td>
+					<td><button class="details-edit-btn" type="button" data-edit-payment-id="${entry.id}" data-contractor-id="${contractorId}">Edit</button> <button class="details-delete-btn" type="button" data-delete-payment-id="${entry.id}" data-contractor-id="${contractorId}">Delete</button></td>
 				`;
+				tr.dataset.paymentId = String(entry.id);
 				elements.contractorDetailsBody.appendChild(tr);
+				tr.dataset.contractorId = String(contractorId);
 			});
 			elements.contractorDetailsModal.style.display = 'flex';
 		}
@@ -603,8 +629,9 @@ async function submitPayment(event) {
 	}
 
 	try {
-		const response = await fetch(`${CONTRACTOR_API_URL}/${contractorId}/payments`, {
-			method: 'POST',
+		const isEditing = Number.isInteger(state.editingPaymentId) && state.editingPaymentId > 0;
+		const response = await fetch(isEditing ? `${CONTRACTOR_API_URL}/${contractorId}/payments/${state.editingPaymentId}` : `${CONTRACTOR_API_URL}/${contractorId}/payments`, {
+			method: isEditing ? 'PUT' : 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			credentials: 'include',
 			body: JSON.stringify(payload)
@@ -617,6 +644,10 @@ async function submitPayment(event) {
 
 		closePaymentModal();
 		await fetchContractorRows();
+		if (isEditing) {
+			const updatedRow = state.rows.find((row) => Number(row.id) === contractorId);
+			if (updatedRow) await openDetailsModal(updatedRow, true);
+		}
 	} catch (error) {
 		console.error(error);
 		alert(error.message || 'Unable to save payment.');
@@ -662,6 +693,37 @@ function bindEvents() {
 		if (event.target === elements.contractorDetailsModal) {
 			closeDetailsModal();
 		}
+		const editButton = event.target.closest('[data-edit-payment-id]');
+		const deleteButton = event.target.closest('[data-delete-payment-id]');
+		if (!editButton && !deleteButton) return;
+		const paymentId = Number((editButton || deleteButton).getAttribute(editButton ? 'data-edit-payment-id' : 'data-delete-payment-id'));
+		const row = event.target.closest('tr');
+		const contractorId = Number((editButton || deleteButton).getAttribute('data-contractor-id') || (row && row.dataset.contractorId));
+		if (!paymentId || !contractorId) {
+			alert('Unable to identify this payment record. Please refresh the details.');
+			return;
+		}
+		if (editButton) {
+			const payment = state.detailPayments && state.detailPayments.find((entry) => Number(entry.id) === paymentId);
+			if (payment) {
+				openEditPaymentModal(contractorId, payment);
+				return;
+			}
+			fetch(`${CONTRACTOR_API_URL}/${contractorId}/transactions`, { credentials: 'include' })
+				.then((response) => response.json())
+				.then((payload) => {
+					const freshPayment = (payload.dayWise || []).find((entry) => Number(entry.id) === paymentId);
+					if (!freshPayment) throw new Error('Payment transaction not found.');
+					state.detailPayments = payload.dayWise;
+					openEditPaymentModal(contractorId, freshPayment);
+				})
+				.catch((error) => alert(error.message));
+			return;
+		}
+		if (!window.confirm('Delete this payment record?')) return;
+		fetch(`${CONTRACTOR_API_URL}/${contractorId}/payments/${paymentId}`, { method: 'DELETE', credentials: 'include' })
+			.then(async (response) => { if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Unable to delete payment.'); await fetchContractorRows(); closeDetailsModal(); })
+			.catch((error) => alert(error.message));
 	});
 
 	elements.paymentForm.addEventListener('submit', submitPayment);
@@ -714,8 +776,9 @@ function bindEvents() {
 			return;
 		}
 
-		const detailsBtn = event.target.closest('button[data-view-details-id]');
+		const detailsBtn = event.target.closest('[data-view-details-id]');
 		if (detailsBtn) {
+			event.preventDefault();
 			const contractorId = Number(detailsBtn.getAttribute('data-view-details-id')) || 0;
 			const row = state.rows.find((item) => Number(item.id) === contractorId);
 			if (!row) {
